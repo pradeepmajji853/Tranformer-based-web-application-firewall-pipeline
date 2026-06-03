@@ -19,8 +19,8 @@ graph TD
         Model -->|4. Detect UNK/Signature Threat| Scoring[Calibrated Scoring Engine]
     end
     
-    Scoring -->|5. Anomalous (Score > 0.50)| WAF_ML
-    Scoring -->|5. Safe (Score <= 0.50)| WAF_ML
+    Scoring -->|"5. Anomalous (Score > 0.50)"| WAF_ML
+    Scoring -->|"5. Safe (Score <= 0.50)"| WAF_ML
     
     WAF_ML -->|6a. HTTP 403 Forbidden| Nginx
     WAF_ML -->|6b. HTTP 200 OK| Nginx
