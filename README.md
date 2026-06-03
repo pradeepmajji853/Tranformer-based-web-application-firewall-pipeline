@@ -25,7 +25,7 @@ graph TD
     WAF_ML -->|6a. HTTP 403 Forbidden| Nginx
     WAF_ML -->|6b. HTTP 200 OK| Nginx
     
-    Nginx -->|7a. Block (403)| Client
+    Nginx -->|"7a. Block (403)"| Client
     Nginx -->|7b. Forward Request| Tomcat[Apache Tomcat Server<br/>Port 8080]
     
     subgraph "Tomcat Servlet Container"
