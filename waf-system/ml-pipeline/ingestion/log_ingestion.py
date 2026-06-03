@@ -116,9 +116,13 @@ class LogIngestion:
         return self.queue.qsize()
 
 # Configuration
+current_dir = Path(__file__).resolve().parent
+project_root = (current_dir / '../../..').resolve()  # points to waf-system's parent directory, which is the repository root
+waf_root = project_root / 'waf-system'
+
 DEFAULT_LOG_PATHS = [
-    "/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/logs/access.log",
-    "/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/tomcat/current/logs/localhost_access_log.txt"
+    str(waf_root / 'data' / 'logs' / 'access.log'),
+    str(waf_root / 'tomcat' / 'current' / 'logs' / 'localhost_access_log.txt')
 ]
 
 if __name__ == "__main__":

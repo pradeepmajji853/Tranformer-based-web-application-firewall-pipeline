@@ -536,7 +536,7 @@
             e.preventDefault();
             const formData = new FormData(this);
             
-            fetch('/blog-cms-app/blogs', {
+            fetch('/blog-cms/blog', {
                 method: 'POST',
                 body: formData
             })
@@ -556,7 +556,7 @@
             e.preventDefault();
             const formData = new FormData(this);
             
-            fetch('/blog-cms-app/comments', {
+            fetch('/blog-cms/comments', {
                 method: 'POST',
                 body: formData
             })
@@ -576,7 +576,7 @@
             e.preventDefault();
             const formData = new FormData(this);
             
-            fetch('/blog-cms-app/upload', {
+            fetch('/blog-cms/upload', {
                 method: 'POST',
                 body: formData
             })
@@ -597,7 +597,7 @@
             const formData = new FormData(this);
             formData.append('password', 'default123'); // Default password
             
-            fetch('/blog-cms-app/users', {
+            fetch('/blog-cms/users', {
                 method: 'POST',
                 body: formData
             })
@@ -625,7 +625,7 @@
             const params = new URLSearchParams({ q: query });
             if (type) params.append('type', type);
             
-            fetch(`/blog-cms-app/search?${params}`)
+            fetch(`/blog-cms/search?${params}`)
             .then(response => response.json())
             .then(data => {
                 displaySearchResults(data);
@@ -652,7 +652,7 @@
             formData.append('sortBy', 'date');
             formData.append('sortOrder', 'desc');
             
-            fetch('/blog-cms-app/search', {
+            fetch('/blog-cms/search', {
                 method: 'POST',
                 body: formData
             })
@@ -700,10 +700,10 @@
         window.addEventListener('load', function() {
             // Simulate some API calls for training data
             setTimeout(() => {
-                fetch('/blog-cms-app/blogs?page=1&limit=5').catch(() => {});
-                fetch('/blog-cms-app/users?role=author').catch(() => {});
-                fetch('/blog-cms-app/comments?status=approved').catch(() => {});
-                fetch('/blog-cms-app/content?type=page').catch(() => {});
+                fetch('/blog-cms/blog?page=1&limit=5').catch(() => {});
+                fetch('/blog-cms/users?role=author').catch(() => {});
+                fetch('/blog-cms/comments?status=approved').catch(() => {});
+                fetch('/blog-cms/content?type=page').catch(() => {});
             }, 1000);
         });
     </script>

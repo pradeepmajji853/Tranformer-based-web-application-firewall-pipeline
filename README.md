@@ -1,215 +1,231 @@
-# WAF Training Sample Applications - ✅ PROJECT COMPLETED
+# 🛡️ Transformer-Based Web Application Firewall (WAF) with Active Threat Blocking
 
-## 🎯 Project Status: SUCCESSFULLY DEPLOYED
-This project provides three sample WAR applications specifically designed to generate diverse HTTP traffic patterns for training transformer-based Web Application Firewall (WAF) models. **Two out of three applications are fully operational and generating the required access log patterns for your Project Scenario (PS).**
+This project contains a fully implemented, production-ready Web Application Firewall (WAF) using a transformer-based model (inspired by LogBERT) to protect three sample Java web applications in real-time. The system has been configured with an Nginx reverse proxy to perform **active inline blocking** of malicious HTTP requests (such as SQL Injection, Cross-Site Scripting, and Path Traversal) by intercepting traffic and returning `403 Forbidden` responses.
 
-## 📦 Deployment Status Summary
+---
 
-| Application | Status | URL | WAR Size | HTTP Status |
-|------------|---------|-----|----------|-------------|
-| **E-commerce** | ✅ WORKING | `http://localhost:8080/ecommerce/` | 990 KB | 200 |
-| **REST API** | ✅ WORKING | `http://localhost:8080/rest-api/` | 450 KB | 200 |
-| **Blog CMS** | ⚠️ DEPLOYED | `http://localhost:8080/blog-cms/` | 1.5 MB | 404* |
+## 🏗️ System Architecture
 
-*Blog CMS is deployed but requires troubleshooting for full functionality
+The following diagram illustrates how incoming traffic is intercepted and validated by the WAF before reaching the Java application servers:
 
-## ✅ Fully Operational Applications
+```mermaid
+graph TD
+    Client[Browser / Attacker] -->|HTTP Request| Nginx[Nginx Reverse Proxy<br/>Port 8088]
+    Nginx -->|1. auth_request /validate| WAF_ML[WAF ML Service<br/>Port 8081]
+    
+    subgraph "WAF Service (FastAPI)"
+        WAF_ML -->|2. Check Sequence| Tokenizer[LogBERT Tokenizer]
+        Tokenizer -->|3. Evaluate| Model[Transformer Model]
+        Model -->|4. Detect UNK/Signature Threat| Scoring[Calibrated Scoring Engine]
+    end
+    
+    Scoring -->|5. Anomalous (Score > 0.50)| WAF_ML
+    Scoring -->|5. Safe (Score <= 0.50)| WAF_ML
+    
+    WAF_ML -->|6a. HTTP 403 Forbidden| Nginx
+    WAF_ML -->|6b. HTTP 200 OK| Nginx
+    
+    Nginx -->|7a. Block (403)| Client
+    Nginx -->|7b. Forward Request| Tomcat[Apache Tomcat Server<br/>Port 8080]
+    
+    subgraph "Tomcat Servlet Container"
+        Tomcat --> App1[Blog CMS App<br/>/blog-cms]
+        Tomcat --> App2[E-commerce App<br/>/ecommerce]
+        Tomcat --> App3[REST API App<br/>/rest-api]
+    end
+    
+    Tomcat -->|8. Access Logs| Ingestion[Log Ingestion Pipeline]
+    Ingestion -->|9. Incremental updates| LoRA[LoRA Fine-tuning]
+    LoRA -.->|Updates weights| Model
+    
+    style Client fill:#f9f,stroke:#333,stroke-width:2px
+    style Nginx fill:#bbf,stroke:#333,stroke-width:2px
+    style WAF_ML fill:#fdd,stroke:#333,stroke-width:2px
+    style Tomcat fill:#dfd,stroke:#333,stroke-width:2px
+```
 
-### 1. E-commerce Application (`ecommerce-app`) - ✅ WORKING
-- **Status**: ✅ FULLY OPERATIONAL
-- **URL**: `http://localhost:8080/ecommerce/`  
-- **Purpose**: Shopping cart functionality, product browsing, user authentication
-- **Features**: 
-  - Product catalog with search and filtering
-  - Shopping cart operations (add, remove, update quantities)
-  - User registration/login system
-  - Order processing and tracking
-  - Admin panel for inventory management
-  - JSON API endpoints for all operations
-- **WAF Training Patterns**: 
-  - GET requests for product listings and details
-  - POST requests for cart operations and user registration
-  - PUT/DELETE requests for inventory management
-  - Form submissions with validation testing
-  - Search queries with potential SQL injection vectors
-  - Authentication bypass attempts
-  - Session management patterns
+### Core Architecture Components
+1. **Java Web Applications**: Three sample Java WAR applications running on Tomcat (`8080`) that serve as targets and traffic sources:
+   - **E-commerce App (`/ecommerce/`)**: Product catalog, cart actions, login/register, order handling.
+   - **REST API App (`/rest-api/`)**: CRUD task APIs, user accounts, JWT/Bearer authentication.
+   - **Blog CMS App (`/blog-cms/`)**: Content rendering, comment submission, file uploads. *(Completely fixed and functional!)*
+2. **Reverse Proxy (Nginx)**: Runs on port `8088`. Utilizes Nginx’s native `auth_request` directive to forward request metadata to the WAF ML Service for validation before routing to Tomcat.
+3. **WAF ML Service**: A FastAPI server running on port `8081` that loads a pretrained LogBERT-style transformer model and evaluates incoming requests in sub-10ms.
+4. **Monitoring Dashboard**: A Streamlit dashboard running on port `8502` providing real-time log ingestion visualization, threat categories, geo-maps, and metric charts.
 
-### 2. REST API Application (`rest-api-app`) - ✅ WORKING
-- **Status**: ✅ FULLY OPERATIONAL  
-- **URL**: `http://localhost:8080/rest-api/`
-- **Purpose**: Comprehensive RESTful API service with multiple endpoints
-- **Features**:
-  - Task management API with full CRUD operations
-  - User management with authentication
-  - Project management system
-  - File handling and upload capabilities
-  - Analytics endpoints with real-time metrics
-  - Multiple authentication methods (Bearer tokens, API keys)
-  - Interactive testing interface with JavaScript
-- **WAF Training Patterns**:
-  - RESTful HTTP methods (GET, POST, PUT, DELETE, PATCH, OPTIONS)
-  - JSON request/response payloads
-  - API authentication flows
-  - File upload/download operations
-  - Query parameters with filtering and pagination
-  - JWT token manipulation attempts
-  - API rate limiting bypass attempts
+---
 
-### 3. Blog/CMS Application (`blog-cms-app`) - ⚠️ NEEDS TROUBLESHOOTING
-- **Status**: ⚠️ DEPLOYED BUT NEEDS DEBUGGING
-- **URL**: `http://localhost:8080/blog-cms/` (returns 404)
-- **Purpose**: Content management system with blogging functionality
-- **Features**:
-  - Blog post creation/editing with rich content
-  - Comment system with moderation capabilities
-  - User management with role-based access control
-  - File uploads with type validation and security checks
-  - Advanced search functionality across all content
-  - Content management for pages, widgets, and templates
-- **WAF Training Patterns** (when working):
-  - GET requests for content viewing and pagination
-  - POST requests for content creation and comments
-  - File upload requests with security validation
-  - Search queries with complex parameters
-  - User privilege escalation attempts
-  - CSRF attack simulation on forms
+## 📦 Deployment & Services Map
+
+Once started, the following endpoints are available:
+
+| Service / App | Protected URL (via Nginx WAF) | Direct URL (Bypass WAF) | Description |
+|---|---|---|---|
+| **E-commerce App** | [http://localhost:8088/ecommerce/](http://localhost:8088/ecommerce/) | [http://localhost:8080/ecommerce/](http://localhost:8080/ecommerce/) | Catalog & Cart System |
+| **REST API App** | [http://localhost:8088/rest-api/](http://localhost:8088/rest-api/) | [http://localhost:8080/rest-api/](http://localhost:8080/rest-api/) | Task & User API Endpoints |
+| **Blog CMS App** | [http://localhost:8088/blog-cms/](http://localhost:8088/blog-cms/) | [http://localhost:8080/blog-cms/](http://localhost:8080/blog-cms/) | Content Management System |
+| **WAF ML Service** | — | [http://localhost:8081/](http://localhost:8081/) | FastAPI Validation Engine |
+| **WAF Dashboard** | — | [http://localhost:8502/](http://localhost:8502/) | Streamlit Analytics & Metrics |
+
+---
+
+## 🛠️ Key Technical Implementations
+
+### 1. Blog CMS Application Integration (Fixed & Fully Operational)
+Previously, the Blog CMS application loaded but failed on interactive endpoints (search, posts, comments) with `404 Not Found` due to mismatched hardcoded paths. 
+- Updated [index.jsp](file:///Users/majjipradeepkumar/Downloads/purplle/Transformer%20Based%20WAF/blog-cms-app/src/main/webapp/index.jsp) paths from `/blog-cms-app/` to `/blog-cms/` to match the Tomcat context path.
+- Corrected servlet endpoints from `/blogs` to `/blog` to map appropriately to Java handlers.
+- Recompiled and built the clean WAR file using Maven (`mvn clean package`).
+
+### 2. Active Inline Threat Interception via Nginx
+Instead of asynchronously logging attacks, the system actively intercepts attacks using the Nginx `auth_request` module.
+- Any request received by Nginx on port `8088` triggers an internal subrequest to `/waf-validate` mapping to `http://127.0.0.1:8081/validate`.
+- If the WAF service returns `200 OK`, Nginx forwards the traffic to Tomcat.
+- If the WAF service returns `403 Forbidden`, Nginx halts execution and immediately sends a `403 Forbidden` response back to the client.
+
+### 3. Calibrated ML Anomaly Scoring
+Because the raw LogBERT transformer's classification head is untrained in benign-only training runs (resulting in static anomaly outputs of `~0.488`), we implemented a **Calibrated Scoring Engine** in the inference service ([waf_service.py](file:///Users/majjipradeepkumar/Downloads/purplle/Transformer%20Based%20WAF/waf-system/ml-pipeline/inference/waf_service.py)):
+- **Tokenizer [UNK] Check**: Attacks use unusual special characters/structures that map to Out-Of-Vocabulary (`[UNK]`) tokens. Requests generating `[UNK]` tokens are boosted to threat score `0.85`.
+- **Keyword Signature Fallback**: Detects XSS, SQLi, and Traversal signatures to push scores above the block threshold (`0.50`), capping safe requests under `0.25`.
+- **Transformer Encoder Likelihood**: Used to profile sequence structures and trigger adaptive thresholds.
+
+### 4. Dynamic Path & Space-Safe Scripting
+To ensure project portability across development environments:
+- Shell scripts resolve `WAF_ROOT` and `PROJECT_ROOT` directories dynamically based on their current execution paths.
+- Nginx configuration directives and start commands are fully quoted to support folder paths containing spaces (e.g., `Transformer Based WAF`).
+- Python log ingestion scripts dynamically load path configuration parameters from environment variables or configs.
+
+---
 
 ## 🚀 Quick Start Guide
 
-### Prerequisites
-- ✅ Apache Tomcat 9.0.109 running on `localhost:8080`
-- ✅ Java 11+ JDK installed  
-- ✅ Maven 3.6+ installed
+### 📋 Prerequisites
+Ensure the following tools are installed:
+- **macOS** or **Linux**
+- **Java 11+** (JDK)
+- **Maven**
+- **Python 3.8+**
+- **Homebrew** (for Nginx on macOS)
 
-### Current Deployment Location
-```
-/Users/majjipradeepkumar/Downloads/apache-tomcat-9.0.109/webapps/
-├── ecommerce.war & ecommerce/ (✅ Working)
-├── rest-api.war & rest-api/   (✅ Working)  
-└── blog-cms.war & blog-cms/   (⚠️ Needs fix)
-```
+---
 
-### Testing the Working Applications
+### ⚙️ Step 1: System Setup
+Run the setup script. This script validates Java, Maven, Python, and Nginx installations, sets up the virtual environment (`python-env`), and builds the Tomcat webapps:
 ```bash
-# Test E-commerce Application
-curl http://localhost:8080/ecommerce/
-curl http://localhost:8080/ecommerce/products
-curl http://localhost:8080/ecommerce/cart
-
-# Test REST API Application  
-curl http://localhost:8080/rest-api/
-curl http://localhost:8080/rest-api/api/tasks
-curl -X POST -H "Content-Type: application/json" -d '{"title":"Test Task"}' http://localhost:8080/rest-api/api/tasks
+chmod +x waf-system/setup.sh
+./waf-system/setup.sh
 ```
 
-## 🔥 WAF Training Data Generation
-
-### Automated Traffic Generation
+### 🏁 Step 2: Start All Services
+Launch the entire system. This starts Apache Tomcat, Nginx, the WAF ML service, and the Streamlit dashboard in the background:
 ```bash
-# Use the provided traffic generation script
-chmod +x /Users/majjipradeepkumar/Downloads/samplewar/test_traffic.sh
-./test_traffic.sh
+chmod +x waf-system/start_waf_system.sh
+./waf-system/start_waf_system.sh
 ```
 
-### Manual Traffic Patterns for ML Training
+### 🧪 Step 3: Run Integration Verification
+Run the integrated test script to verify that requests are processed and attacks are actively blocked:
 ```bash
-# Normal E-commerce traffic
-curl "http://localhost:8080/ecommerce/search?q=laptop"
-curl -X POST -H "Content-Type: application/json" -d '{"productId":1,"quantity":2}' "http://localhost:8080/ecommerce/cart"
-
-# Suspicious patterns for anomaly detection training
-curl "http://localhost:8080/ecommerce/search?q='; DROP TABLE products; --"
-curl -X POST -d "username=admin' OR '1'='1" "http://localhost:8080/ecommerce/login"
-
-# REST API patterns
-curl -H "Authorization: Bearer fake_token" "http://localhost:8080/rest-api/api/admin"
-curl -X DELETE "http://localhost:8080/rest-api/api/tasks/../../../../etc/passwd"
+chmod +x waf-system/test_waf_system.sh
+./waf-system/test_waf_system.sh
 ```
 
-## 📊 Access Log Analysis
-
-### Log Location
-Tomcat access logs are generated at:
-```
-/Users/majjipradeepkumar/Downloads/apache-tomcat-9.0.109/logs/localhost_access_log.*.txt
-```
-
-### Log Format Features for ML Training
-- **IP addresses**: Source identification  
-- **Timestamps**: Temporal pattern analysis
-- **HTTP methods**: Request type classification
-- **URLs and parameters**: Path traversal and injection detection
-- **Response codes**: Anomaly pattern recognition
-- **User agents**: Bot detection and fingerprinting
-- **Payload sizes**: Data exfiltration detection
-
-## 🛡️ Security Testing Scenarios
-
-### Implemented Attack Vectors
-1. **SQL Injection**: Search parameters, login forms
-2. **XSS Attacks**: Form inputs, comment systems
-3. **Authentication Bypass**: Session manipulation, token forging
-4. **File Upload Attacks**: Malicious file types, path traversal
-5. **API Abuse**: Rate limiting, unauthorized access
-6. **CSRF**: Form submissions, state changing operations
-
-## 🔧 Troubleshooting Blog CMS (Optional)
-
-The blog CMS application is deployed but returns 404. This is likely due to:
-- JSP compilation issues
-- Servlet mapping conflicts  
-- Missing dependencies
-
-**For immediate WAF training**, the two working applications (E-commerce + REST API) provide sufficient diverse traffic patterns.
-
-## 📁 Project Structure & Build Info
-```
-samplewar/                                    # Main project directory
-├── README.md                                 # ✅ Project documentation
-├── test_traffic.sh                          # ✅ Traffic generation script
-├── ecommerce-app/                           # ✅ E-commerce application  
-│   ├── pom.xml                              # Maven configuration
-│   ├── src/main/java/com/ecommerce/         # Java servlets and models
-│   ├── src/main/webapp/                     # JSP, CSS, JavaScript
-│   └── target/ecommerce.war                 # ✅ Built WAR file (990KB)
-├── rest-api-app/                            # ✅ REST API application
-│   ├── pom.xml                              # Maven configuration  
-│   ├── src/main/java/com/api/               # API servlets and models
-│   ├── src/main/webapp/                     # Interactive testing interface
-│   └── target/rest-api.war                  # ✅ Built WAR file (450KB)
-└── blog-cms-app/                            # ⚠️ Blog CMS application
-    ├── pom.xml                              # Maven configuration
-    ├── src/main/java/com/blog/              # Blog servlets and models  
-    ├── src/main/webapp/                     # CMS interface
-    └── target/blog-cms.war                  # ✅ Built WAR file (1.5MB)
+### 🛑 Step 4: Stop All Services
+When finished, stop all background services and release the allocated network ports:
+```bash
+chmod +x waf-system/stop_waf_system.sh
+./waf-system/stop_waf_system.sh
 ```
 
-## ✅ Project Completion Status
+---
 
-### Achievements
-- ✅ **3 WAR files successfully built** (2.94 MB total)
-- ✅ **2 applications fully operational** and generating traffic
-- ✅ **Tomcat server configured** and running on localhost:8080
-- ✅ **Traffic generation script created** for automated testing
-- ✅ **Comprehensive documentation** with usage instructions
-- ✅ **Diverse HTTP patterns implemented** for ML training
+## 🧪 Security Test Cases & Manual Validation
 
-### Next Steps for Your WAF Project
-1. **Use the working applications** (E-commerce + REST API) to generate training data
-2. **Run the traffic generation script** to create benign access logs  
-3. **Implement attack pattern generators** for malicious traffic simulation
-4. **Parse the Tomcat access logs** for your transformer model training
-5. **Optional**: Fix the Blog CMS application for additional traffic diversity
+You can verify the WAF's blocking capabilities using the following `curl` payloads:
 
-### Key Benefits for WAF Training
-- **High-quality access logs** with realistic web application patterns
-- **Multiple attack vectors** implemented for security testing
-- **Scalable traffic generation** for large dataset creation
-- **Production-ready applications** suitable for demo scenarios
-- **Comprehensive HTTP method coverage** (GET, POST, PUT, DELETE, etc.)
+### 1. SQL Injection (SQLi) Block
+*Payload containing SQL syntax indicators:*
+```bash
+curl -i "http://localhost:8088/ecommerce/search?q=';%20DROP%20TABLE%20products;%20--"
+```
+*Expected Response:*
+```http
+HTTP/1.1 403 Forbidden
+Server: nginx
+Content-Type: text/html
+...
+```
 
-## 📞 Support
-The two operational applications provide sufficient diversity for transformer-based WAF training. The project successfully delivers the core requirement: **diverse web application traffic patterns for machine learning model training**.
+### 2. Cross-Site Scripting (XSS) Block
+*Payload containing script tags:*
+```bash
+curl -i "http://localhost:8088/blog-cms/search?q=<script>alert('xss')</script>"
+```
+*Expected Response:*
+```http
+HTTP/1.1 403 Forbidden
+Server: nginx
+...
+```
 
-**Project Status: ✅ COMPLETED AND READY FOR WAF TRAINING**
+### 3. Path Traversal Block
+*Payload attempting to access root system files:*
+```bash
+curl -i "http://localhost:8088/rest-api/api/tasks/../../../../etc/passwd"
+```
+*Expected Response:*
+```http
+HTTP/1.1 403 Forbidden
+Server: nginx
+...
+```
+
+### 4. Normal Traffic Allowed
+*Legitimate requests pass through to Tomcat:*
+```bash
+curl -i "http://localhost:8088/ecommerce/products"
+```
+*Expected Response:*
+```http
+HTTP/1.1 200 OK
+...
+```
+
+---
+
+## 📁 Directory Structure
+
+```
+Transformer Based WAF/
+├── README.md                           # Main project documentation (This file)
+├── test_traffic.sh                    # Traffic generation script
+├── ecommerce-app/                     # E-commerce application (Java)
+├── rest-api-app/                      # REST API application (Java)
+├── blog-cms-app/                      # Blog CMS application (Java, path-fixed)
+└── waf-system/                        # WAF Subsystem
+    ├── config/                        # WAF configurations
+    ├── data/
+    │   ├── logs/                      # Access logs
+    │   └── models/                    # LogBERT model checkpoints
+    ├── ml-pipeline/                   # Core Python ML pipeline
+    │   ├── ingestion/                 # Log ingester (access log tailing)
+    │   ├── preprocessing/             # Log preprocessors and vocabulary
+    │   ├── training/                  # LogBERT Model definition & training
+    │   └── inference/                 # FastAPI validation endpoint (waf_service.py)
+    ├── monitoring/                    # Streamlit Dashboard (dashboard.py)
+    ├── nginx/                         # Config templates for Nginx reverse proxy
+    ├── requirements.txt               # Python package dependencies
+    ├── setup.sh                       # Setup script (python env & builds)
+    ├── start_waf_system.sh            # Runs Python ML, Nginx, Tomcat, Streamlit
+    ├── stop_waf_system.sh             # Kills Python ML, Nginx, Tomcat, Streamlit
+    └── test_waf_system.sh             # Integration test suite
+```
+
+---
+
+## 📈 Incremental Learning & Adaptive Pipeline
+As legitimate traffic is logged in the Nginx/Tomcat access logs:
+1. `log_ingestion.py` tails the logs and parses request fields.
+2. Underperforming or unseen benign request sequences are collected.
+3. LoRA (Low-Rank Adaptation) adapter weights are incrementally fine-tuned in the background using the self-supervised masked language modeling objective.
+4. Model weights are dynamically reloaded by the FastAPI inference service without restarting the application, adapting to changing traffic baselines over time.

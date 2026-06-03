@@ -5,8 +5,9 @@
 
 set -e
 
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WAF_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$WAF_ROOT/.." && pwd )"
 
 # Colors for output
 RED='\033[0;31m'
@@ -253,8 +254,8 @@ http {
         '"\$http_referer" "\$http_user_agent" '
         '\$request_time';
     
-    access_log $WAF_ROOT/data/logs/access.log waf_format;
-    error_log $WAF_ROOT/data/logs/error.log;
+    access_log "$WAF_ROOT/data/logs/access.log" waf_format;
+    error_log "$WAF_ROOT/data/logs/error.log";
     
     upstream tomcat_backend {
         server localhost:8080;
@@ -276,10 +277,24 @@ http {
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
         
+        # Internal WAF validation subrequest
+        location = /waf-validate {
+            internal;
+            proxy_pass http://waf_ml_service/validate;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+            proxy_set_header X-Original-URI \$request_uri;
+            proxy_set_header X-Original-Method \$request_method;
+            proxy_set_header X-Original-IP \$remote_addr;
+            proxy_set_header X-Original-UA \$http_user_agent;
+        }
+        
         # Main application proxy
         location / {
+            auth_request /waf-validate;
+            
             # Log request for ML processing
-            access_log $WAF_ROOT/data/logs/access.log waf_format;
+            access_log "$WAF_ROOT/data/logs/access.log" waf_format;
             
             proxy_pass http://tomcat_backend;
             proxy_set_header Host \$host;
@@ -301,7 +316,7 @@ EOF
         sleep 2
     fi
     
-    nginx -g "error_log $WAF_ROOT/data/logs/nginx_bootstrap_error.log notice;" -p "$WAF_ROOT" -c "$WAF_ROOT/nginx.conf"
+    nginx -g "error_log '$WAF_ROOT/data/logs/nginx_bootstrap_error.log' notice;" -p "$WAF_ROOT" -c "$WAF_ROOT/nginx.conf"
     print_status "Nginx reverse proxy started on port $NGINX_PORT"
 else
     print_warning "Nginx not available, WAF will run on port 8080 directly"

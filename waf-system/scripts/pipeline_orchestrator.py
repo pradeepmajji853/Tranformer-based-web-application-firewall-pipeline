@@ -56,7 +56,11 @@ class WAFPipelineOrchestrator:
         config_path = Path(self.config_path)
         
         if not config_path.exists():
-            # Create default config
+            # Create default config dynamically
+            script_dir = Path(__file__).resolve().parent
+            project_root = (script_dir / '../..').resolve()
+            waf_root = project_root / 'waf-system'
+            
             default_config = {
                 'logging': {
                     'level': 'INFO',
@@ -64,10 +68,10 @@ class WAFPipelineOrchestrator:
                 },
                 'data': {
                     'log_paths': [
-                        '/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/logs/access.log'
+                        str(waf_root / 'data' / 'logs' / 'access.log')
                     ],
-                    'training_data_dir': '/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/training',
-                    'model_dir': '/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/models'
+                    'training_data_dir': str(waf_root / 'data' / 'training'),
+                    'model_dir': str(waf_root / 'data' / 'models')
                 },
                 'model': {
                     'vocab_size': 10000,

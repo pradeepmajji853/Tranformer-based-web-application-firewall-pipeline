@@ -2,8 +2,9 @@
 
 # WAF System Shutdown Script
 
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WAF_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$WAF_ROOT/.." && pwd )"
 
 # Colors for output
 RED='\033[0;31m'

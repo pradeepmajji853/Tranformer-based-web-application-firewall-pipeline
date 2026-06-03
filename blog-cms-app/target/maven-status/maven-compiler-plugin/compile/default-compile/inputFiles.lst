@@ -1,8 +1,8 @@
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/ContentServlet.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/model/Comment.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/FileUploadServlet.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/UserManagementServlet.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/model/BlogPost.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/BlogServlet.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/SearchServlet.java
-/Users/majjipradeepkumar/Downloads/samplewar/blog-cms-app/src/main/java/com/blog/servlet/CommentServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/model/Comment.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/BlogServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/ContentServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/model/BlogPost.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/CommentServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/UserManagementServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/FileUploadServlet.java
+/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF/blog-cms-app/src/main/java/com/blog/servlet/SearchServlet.java

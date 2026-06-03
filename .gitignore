@@ -1,0 +1,39 @@
+# OS Metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.suo
+
+# Python Caches & Environments
+python-env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+*.ipynb
+
+# Java & Maven Build Outputs
+target/
+*.class
+*.jar
+*.ear
+
+# WAF Runtime logs & PID files
+waf-system/logs/*.log
+waf-system/logs/*.pid
+waf-system/logs/system.pids
+waf-system/data/logs/*
+waf-system/data/waf_monitoring.db
+
+# Tomcat Instance Runtime Caches & Logs
+waf-system/tomcat/apache-tomcat-*/logs/*
+waf-system/tomcat/apache-tomcat-*/work/*
+waf-system/tomcat/apache-tomcat-*/temp/*
+!waf-system/tomcat/apache-tomcat-*/logs/.gitkeep
+
+# Generated Nginx directory
+waf-system/nginx/

@@ -4,12 +4,13 @@ A complete, production-ready Web Application Firewall system using transformer m
 
 ## 🏗️ System Architecture
 
+### WAF Active Threat Blocking Architecture
+
 ```
-Browser/Attacker → Nginx (Reverse Proxy) → Java Applications (Tomcat)
-                      ↓ (Async WAF Scoring)
-                   WAF ML Service ← Log Processing ← Access Logs
-                      ↓
-                 Monitoring Dashboard
+Browser/Attacker → Nginx (Reverse Proxy) ───[auth_request]───→ WAF ML Service (/validate)
+                       │ (if 200 OK)                                │ (Calculates score)
+                       ▼                                            ▼ (Checks UNK & keywords)
+             Java Applications (Tomcat)                     403 Forbidden (Blocked!)
 ```
 
 ### Core Components
@@ -36,7 +37,7 @@ Browser/Attacker → Nginx (Reverse Proxy) → Java Applications (Tomcat)
 
 1. **Clone and navigate to the project**:
    ```bash
-   cd /Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline
+   cd "/Users/majjipradeepkumar/Downloads/purplle/Transformer Based WAF"
    ```
 
 2. **Run the setup script**:

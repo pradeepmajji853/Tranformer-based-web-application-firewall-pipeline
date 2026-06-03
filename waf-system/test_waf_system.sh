@@ -3,8 +3,9 @@
 # Test Script for WAF System
 # Comprehensive testing of all WAF components
 
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WAF_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$WAF_ROOT/.." && pwd )"
 
 # Colors
 GREEN='\033[0;32m'
@@ -196,6 +197,32 @@ done
 
 print_pass "Security pattern testing completed"
 TESTS_PASSED=$((TESTS_PASSED + 1))
+TESTS_RUN=$((TESTS_RUN + 1))
+
+# Test active blocking through Nginx on port 8088
+print_test "Testing active threat blocking through Nginx reverse proxy (port 8088)..."
+BLOCKED_COUNT=0
+for pattern in "${ATTACK_PATTERNS[@]}"; do
+    method=$(echo "$pattern" | cut -d' ' -f1)
+    uri=$(echo "$pattern" | cut -d' ' -f2)
+    
+    # Send request to Nginx proxy
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" -X "$method" -H "User-Agent: AttackBot/1.0" "http://localhost:8088$uri")
+    
+    if [ "$http_code" -eq 403 ]; then
+        echo "    Active Blocking: $method $uri -> BLOCKED (HTTP 403)"
+        BLOCKED_COUNT=$((BLOCKED_COUNT + 1))
+    else
+        echo "    Active Blocking: $method $uri -> ALLOWED (HTTP $http_code)"
+    fi
+done
+
+if [ $BLOCKED_COUNT -gt 0 ]; then
+    print_pass "Active blocking test passed ($BLOCKED_COUNT/${#ATTACK_PATTERNS[@]} attacks blocked)"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    print_warning "Active blocking test failed (0/${#ATTACK_PATTERNS[@]} attacks blocked)"
+fi
 TESTS_RUN=$((TESTS_RUN + 1))
 
 # Performance test

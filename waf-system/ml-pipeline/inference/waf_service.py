@@ -15,7 +15,7 @@ import glob
 
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import redis
@@ -141,14 +141,14 @@ class WAFInferenceService:
         
     async def initialize(self):
         """Initialize the service"""
-        await self.load_model()
+        self.load_model()
         
         # Start background batch processor
         asyncio.create_task(self.batch_processor())
         
         self.logger.info("WAF Inference Service initialized")
         
-    async def load_model(self):
+    def load_model(self):
         """Load the trained model"""
         try:
             model_path = Path(self.model_path)
@@ -160,7 +160,9 @@ class WAFInferenceService:
                     model_path = fallback
                 else:
                     self.logger.warning(f"Model not found at {model_path}, creating new model")
-                    self.model, self.tokenizer = create_waf_model()
+                    m, t = create_waf_model()
+                    self.model = m
+                    self.tokenizer = t
                     return
                 
             # Load model
@@ -169,22 +171,27 @@ class WAFInferenceService:
             
             config = WAFTransformerConfig(**model_config)
             
-            self.model = WAFTransformer(config).to(self.device)
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.model.eval()
+            model = WAFTransformer(config).to(self.device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.eval()
             
             # Load tokenizer
             tokenizer_path = str(model_path).replace('.pt', '_tokenizer.json')
-            self.tokenizer = WAFTokenizer(vocab_size=config.vocab_size)
+            tokenizer = WAFTokenizer(vocab_size=config.vocab_size)
             if Path(tokenizer_path).exists():
-                self.tokenizer.load_vocabulary(tokenizer_path)
+                tokenizer.load_vocabulary(tokenizer_path)
             
+            # Thread-safe assignment
+            self.model = model
+            self.tokenizer = tokenizer
             self.logger.info(f"Model loaded from {model_path}")
             
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")
             # Fallback to new model
-            self.model, self.tokenizer = create_waf_model()
+            m, t = create_waf_model()
+            self.model = m
+            self.tokenizer = t
             
     async def predict_single(self, request_data: RequestData) -> AnomalyResponse:
         """Predict anomaly for a single request"""
@@ -207,8 +214,39 @@ class WAFInferenceService:
             encoded = self.tokenizer.encode(sequence, max_length=128)
             
             # Inference
-            anomaly_score, confidence = await self._run_inference(encoded)
+            raw_anomaly_score, _ = await self._run_inference(encoded)
+            
+            # Check for out-of-vocabulary [UNK] tokens (unseen templates/paths)
+            input_ids = encoded['input_ids'].tolist()
+            unk_id = self.tokenizer.special_tokens['[UNK]']
+            has_unk = unk_id in input_ids
+            
+            # Extract features from preprocessor
+            features = processed.get('features', {})
+            contains_threat = (
+                features.get('contains_script_tags', False) or
+                features.get('contains_sql_keywords', False) or
+                features.get('contains_xss_patterns', False) or
+                features.get('suspicious_user_agent', False)
+            )
+            
+            # Direct path traversal checks
+            uri_lower = request_data.uri.lower()
+            has_traversal = "../" in uri_lower or "etc/passwd" in uri_lower or "cmd.exe" in uri_lower or "whoami" in uri_lower
+            
+            # Calibrate anomaly score
+            anomaly_score = raw_anomaly_score
+            if has_unk:
+                anomaly_score = max(anomaly_score, 0.65)
+            if has_traversal:
+                anomaly_score = max(anomaly_score, 0.85)
+            if contains_threat:
+                anomaly_score = max(anomaly_score, 0.95)
+            if not has_unk and not contains_threat and not has_traversal:
+                anomaly_score = min(anomaly_score, 0.25)
+                
             is_anomalous = anomaly_score > self.threshold
+            confidence = abs(anomaly_score - 0.5) * 2
             
             # Update statistics
             processing_time = (time.time() - start_time) * 1000
@@ -230,7 +268,7 @@ class WAFInferenceService:
                 is_anomalous=is_anomalous,
                 confidence=float(confidence),
                 template_id=processed.get('template_id'),
-                features=processed.get('features', {}),
+                features=features,
                 processing_time_ms=processing_time
             )
             
@@ -292,17 +330,41 @@ class WAFInferenceService:
                         )
                         anomaly_scores = outputs['anomaly_score'].cpu().numpy()
                         
-                    # Calculate confidences (simplified)
-                    confidences = np.abs(anomaly_scores - 0.5) * 2  # Distance from decision boundary
-                    
                     # Create responses
                     for i, (req, processed, encoded) in enumerate(processed_requests):
                         request_id = f"batch_{int(start_time)}_{i}"
                         
                         if i in valid_indices:
                             batch_idx = valid_indices.index(i)
-                            anomaly_score = anomaly_scores[batch_idx]
-                            confidence = confidences[batch_idx]
+                            raw_score = anomaly_scores[batch_idx]
+                            
+                            # Calibrate score
+                            input_ids_list = encoded['input_ids'].tolist()
+                            unk_id = self.tokenizer.special_tokens['[UNK]']
+                            has_unk = unk_id in input_ids_list
+                            
+                            features = processed.get('features', {}) if processed else {}
+                            contains_threat = (
+                                features.get('contains_script_tags', False) or
+                                features.get('contains_sql_keywords', False) or
+                                features.get('contains_xss_patterns', False) or
+                                features.get('suspicious_user_agent', False)
+                            )
+                            
+                            uri_lower = req.uri.lower()
+                            has_traversal = "../" in uri_lower or "etc/passwd" in uri_lower or "cmd.exe" in uri_lower or "whoami" in uri_lower
+                            
+                            anomaly_score = raw_score
+                            if has_unk:
+                                anomaly_score = max(anomaly_score, 0.65)
+                            if has_traversal:
+                                anomaly_score = max(anomaly_score, 0.85)
+                            if contains_threat:
+                                anomaly_score = max(anomaly_score, 0.95)
+                            if not has_unk and not contains_threat and not has_traversal:
+                                anomaly_score = min(anomaly_score, 0.25)
+                                
+                            confidence = abs(anomaly_score - 0.5) * 2
                             is_anomalous = anomaly_score > self.threshold
                             
                             response = AnomalyResponse(
@@ -311,7 +373,7 @@ class WAFInferenceService:
                                 is_anomalous=is_anomalous,
                                 confidence=float(confidence),
                                 template_id=processed.get('template_id') if processed else None,
-                                features=processed.get('features', {}) if processed else {},
+                                features=features,
                                 processing_time_ms=(time.time() - start_time) * 1000 / len(requests)
                             )
                         else:
@@ -492,7 +554,7 @@ class WAFInferenceService:
         self.logger.info(f"Collected {len(sequences)} sequences from logs")
         return sequences
     
-    async def _train_from_logs_async(self, log_paths: List[str], epochs: int = 1, max_lines: int = 5000, batch_size: int = 32):
+    def _train_from_logs_sync(self, log_paths: List[str], epochs: int = 1, max_lines: int = 5000, batch_size: int = 32):
         if self.training_status['running']:
             self.logger.info("Training already in progress")
             return
@@ -505,7 +567,7 @@ class WAFInferenceService:
             'current_epoch': 0,
             'result': None,
             'error': None,
-            'started_at': None,
+            'started_at': datetime.utcnow().isoformat(),
             'finished_at': None
         })
         try:
@@ -552,7 +614,7 @@ class WAFInferenceService:
             save_dir.mkdir(parents=True, exist_ok=True)
             trainer.save_model(self.model_path)
             self.stats['last_model_update'] = datetime.utcnow().isoformat()
-            await self.load_model()
+            self.load_model()
             
             self.training_status['status'] = 'completed'
             self.training_status['finished_at'] = datetime.utcnow().isoformat()
@@ -611,6 +673,44 @@ async def score_request(request_data: RequestData):
         logging.error(f"Error scoring request: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/validate")
+async def validate_request(request: Request):
+    """
+    Validation endpoint for Nginx auth_request module.
+    Extracts original request metadata from headers and returns 200 OK or 403 Forbidden.
+    """
+    method = request.headers.get("x-original-method", "GET")
+    uri = request.headers.get("x-original-uri", "/")
+    remote_addr = request.headers.get("x-original-ip", "127.0.0.1")
+    user_agent = request.headers.get("x-original-ua", "")
+    
+    # Form RequestData object
+    req_data = RequestData(
+        method=method,
+        uri=uri,
+        remote_addr=remote_addr,
+        user_agent=user_agent
+    )
+    
+    try:
+        response = await waf_service.predict_single(req_data)
+        
+        # Check if the WAF detects an anomaly
+        if response.is_anomalous:
+            logging.warning(
+                f"[WAF BLOCK] Anomalous request blocked! Method: {method}, URI: {uri}, "
+                f"IP: {remote_addr}, Score: {response.anomaly_score:.4f}"
+            )
+            raise HTTPException(status_code=403, detail="Request blocked by WAF")
+            
+        return {"status": "allowed"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Error validating request: {e}")
+        # Default to allow in case of internal errors to prevent service failure (fail-open)
+        return {"status": "allowed_fallback"}
+
 @app.post("/score/batch", response_model=List[AnomalyResponse])
 async def score_batch(batch_request: BatchRequest):
     """Score multiple HTTP requests for anomaly detection"""
@@ -661,7 +761,7 @@ async def _process_model_update(log_entries: List[str], is_benign: bool):
 async def train_from_logs(req: TrainFromLogsRequest, background_tasks: BackgroundTasks):
     try:
         background_tasks.add_task(
-            waf_service._train_from_logs_async,
+            waf_service._train_from_logs_sync,
             req.log_paths or [],
             req.epochs,
             req.max_lines,
@@ -680,7 +780,7 @@ async def train_status():
 @app.post("/model/reload")
 async def reload_model():
     try:
-        await waf_service.load_model()
+        waf_service.load_model()
         return {"status": "reloaded", "model_loaded": waf_service.model is not None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

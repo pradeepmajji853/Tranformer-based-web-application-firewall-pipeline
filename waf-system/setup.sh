@@ -8,8 +8,9 @@ set -e
 echo "=== WAF System Setup ==="
 echo "Setting up complete WAF pipeline with Tomcat, Nginx, and ML components..."
 
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+WAF_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$WAF_ROOT/.." && pwd )"
 TOMCAT_VERSION="9.0.82"
 NGINX_VERSION="1.24.0"
 
@@ -99,7 +100,7 @@ cp "$PROJECT_ROOT"/*/target/*.war "$TOMCAT_WEBAPPS/"
 # Setup Python environment for ML pipeline
 print_status "Setting up Python environment for ML pipeline..."
 cd "$WAF_ROOT"
-if [ ! -d "python-env" ]; then
+if [ ! -f "python-env/bin/activate" ]; then
     python3 -m venv python-env
 fi
 
@@ -113,7 +114,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Create Nginx configuration
 print_status "Creating Nginx configuration..."
-cat > "$WAF_ROOT/nginx/nginx.conf" << 'EOF'
+cat > "$WAF_ROOT/nginx/nginx.conf" << EOF
 events {
     worker_connections 1024;
 }
@@ -123,14 +124,13 @@ http {
     default_type  application/octet-stream;
     
     # Custom log format for WAF training
-    log_format waf_format '$remote_addr - $remote_user [$time_local] '
-                          '"$request" $status $body_bytes_sent '
-                          '"$http_referer" "$http_user_agent" '
-                          '"$http_x_forwarded_for" $request_time '
-                          '"$request_body"';
+    log_format waf_format '\$remote_addr - \$remote_user [\$time_local] '
+                          '"\$request" \$status \$body_bytes_sent '
+                          '"\$http_referer" "\$http_user_agent" '
+                          '\$request_time';
     
-    access_log /Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/logs/access.log waf_format;
-    error_log /Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline/waf-system/data/logs/error.log;
+    access_log $WAF_ROOT/data/logs/access.log waf_format;
+    error_log $WAF_ROOT/data/logs/error.log;
     
     upstream tomcat_backend {
         server localhost:8080;
@@ -141,121 +141,46 @@ http {
     }
     
     server {
-        listen 80;
+        listen 8088;
         server_name localhost;
         
         # WAF ML Service endpoint
         location /waf-api/ {
             proxy_pass http://waf_ml_service/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
         
-        # Main application proxy with ML scoring
+        # Internal WAF validation subrequest
+        location = /waf-validate {
+            internal;
+            proxy_pass http://waf_ml_service/validate;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+            proxy_set_header X-Original-URI \$request_uri;
+            proxy_set_header X-Original-Method \$request_method;
+            proxy_set_header X-Original-IP \$remote_addr;
+            proxy_set_header X-Original-UA \$http_user_agent;
+        }
+        
+        # Main application proxy
         location / {
-            # Send request to ML service for scoring (non-blocking)
-            access_by_lua_block {
-                local http = require "resty.http"
-                local httpc = http.new()
-                
-                -- Prepare request data for ML service
-                local request_data = {
-                    method = ngx.var.request_method,
-                    uri = ngx.var.request_uri,
-                    headers = ngx.req.get_headers(),
-                    remote_addr = ngx.var.remote_addr,
-                    user_agent = ngx.var.http_user_agent
-                }
-                
-                -- Send to ML service asynchronously
-                local res, err = httpc:request_uri("http://localhost:8081/score", {
-                    method = "POST",
-                    body = require("cjson").encode(request_data),
-                    headers = {
-                        ["Content-Type"] = "application/json",
-                    }
-                })
-                
-                -- Log the ML score but don't block request
-                if res then
-                    ngx.log(ngx.INFO, "ML Score: " .. (res.body or "unknown"))
-                end
-            }
+            auth_request /waf-validate;
+            
+            # Log request for ML processing
+            access_log $WAF_ROOT/data/logs/access.log waf_format;
             
             proxy_pass http://tomcat_backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         }
     }
 }
 EOF
 
-# Create startup script
-print_status "Creating startup script..."
-cat > "$WAF_ROOT/start_waf_system.sh" << 'EOF'
-#!/bin/bash
-
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
-
-echo "=== Starting WAF System ==="
-
-# Start Tomcat
-echo "Starting Tomcat..."
-cd "$WAF_ROOT/tomcat/current"
-./bin/startup.sh
-
-# Wait for Tomcat to start
-sleep 10
-
-# Start ML Pipeline
-echo "Starting ML Pipeline..."
-cd "$WAF_ROOT"
-source python-env/bin/activate
-python ml-pipeline/inference/waf_service.py &
-
-# Start Nginx
-echo "Starting Nginx..."
-sudo nginx -c "$WAF_ROOT/nginx/nginx.conf"
-
-echo "=== WAF System Started ==="
-echo "Applications available at:"
-echo "  - Blog CMS: http://localhost/blog-cms/"
-echo "  - E-commerce: http://localhost/ecommerce/"
-echo "  - REST API: http://localhost/rest-api/"
-echo "  - WAF API: http://localhost/waf-api/"
-EOF
-
-chmod +x "$WAF_ROOT/start_waf_system.sh"
-
-# Create stop script
-cat > "$WAF_ROOT/stop_waf_system.sh" << 'EOF'
-#!/bin/bash
-
-PROJECT_ROOT="/Users/majjipradeepkumar/Downloads/WAF/Sample-apps-for-training-a-transformer-based-WAF-pipleline"
-WAF_ROOT="$PROJECT_ROOT/waf-system"
-
-echo "=== Stopping WAF System ==="
-
-# Stop Nginx
-echo "Stopping Nginx..."
-sudo nginx -s stop
-
-# Stop ML Pipeline
-echo "Stopping ML Pipeline..."
-pkill -f "waf_service.py"
-
-# Stop Tomcat
-echo "Stopping Tomcat..."
-cd "$WAF_ROOT/tomcat/current"
-./bin/shutdown.sh
-
-echo "=== WAF System Stopped ==="
-EOF
-
-chmod +x "$WAF_ROOT/stop_waf_system.sh"
+print_status "Skipping creation of start/stop scripts as they are already managed in git."
 
 print_status "WAF System setup complete!"
 print_status "Run '$WAF_ROOT/start_waf_system.sh' to start the system"
