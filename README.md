@@ -38,10 +38,10 @@ graph TD
     Ingestion -->|9. Incremental updates| LoRA[LoRA Fine-tuning]
     LoRA -.->|Updates weights| Model
     
-    style Client fill:#f9f,stroke:#333,stroke-width:2px
-    style Nginx fill:#bbf,stroke:#333,stroke-width:2px
-    style WAF_ML fill:#fdd,stroke:#333,stroke-width:2px
-    style Tomcat fill:#dfd,stroke:#333,stroke-width:2px
+    style Client fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+    style Nginx fill:#bbf,stroke:#333,stroke-width:2px,color:#000
+    style WAF_ML fill:#fdd,stroke:#333,stroke-width:2px,color:#000
+    style Tomcat fill:#dfd,stroke:#333,stroke-width:2px,color:#000
 ```
 
 ### Core Architecture Components
